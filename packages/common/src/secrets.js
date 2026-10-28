@@ -194,11 +194,39 @@ export function consumeDeviceChallenge(challenge, deviceId) {
 /** Literal that older builds seeded into databases; must never be trusted. */
 export const LEGACY_DEFAULT_WEBHOOK_SECRET = 'merchant_webhook_secret_for_wallet_store';
 
+/** The literal placeholder shipped in `.env.example`; a common copy/paste mistake. */
+const EXAMPLE_MASTER_KEY_PLACEHOLDER = 'REPLACE_WITH_64_RANDOM_HEX_CHARS_GENERATED_BY_crypto_randomBytes_32';
+
 /**
  * Master key for encrypting data at rest (merchant webhook secrets, OTPs).
- * Generated once and persisted alongside the other local secrets.
+ *
+ * Comes from ENCRYPTION_MASTER_KEY when set, otherwise a random key generated once and
+ * persisted under data/.secrets/. The value is validated here instead of at the first
+ * cipher call: an operator who pastes the .env.example placeholder into a host's dashboard
+ * used to get an opaque "Master key must be a 32-byte string" thrown from the middle of the
+ * migration stack on every boot, which looks like a code defect rather than the
+ * configuration mistake it is.
  */
-export const getEncryptionMasterKey = () => resolveSecret('encryption_master_key', 'ENCRYPTION_MASTER_KEY');
+export const getEncryptionMasterKey = () => {
+  const key = resolveSecret('encryption_master_key', 'ENCRYPTION_MASTER_KEY');
+  if (/^[0-9a-f]{64}$/i.test(key)) return key;
+
+  const fromEnv = (process.env.ENCRYPTION_MASTER_KEY || '').trim();
+  const source = fromEnv
+    ? 'the ENCRYPTION_MASTER_KEY environment variable'
+    : 'data/.secrets/encryption_master_key';
+  const placeholderHint = fromEnv === EXAMPLE_MASTER_KEY_PLACEHOLDER
+    ? ' The current value is still the placeholder copied from .env.example.'
+    : '';
+
+  throw new Error(
+    `Invalid encryption master key: ${source} must hold exactly 64 hexadecimal characters ` +
+    `(32 bytes), but it holds ${key.length} character(s).${placeholderHint} Generate one with ` +
+    `\`node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"\` and keep it ` +
+    'stable across deploys, because data encrypted under a different key cannot be read back. ' +
+    'Leave the variable unset to auto-generate a key under data/.secrets/ instead.'
+  );
+};
 
 /** Envelope prefix marking a stored value as AES-256-GCM ciphertext. */
 const ENC_PREFIX = 'enc:v1:';
