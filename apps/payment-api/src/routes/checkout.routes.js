@@ -149,11 +149,12 @@ function sanitizePublicBranding(raw = {}) {
  * }} ctx
  */
 /**
- * Determines whether UPI pollers / observers (Android SMS, Google Messages, Gmail) are active.
- * Strict Rule: Healthy (WORKING) ONLY IF:
+ * Determines whether payment-verification observers (Android SMS, Google Messages, Gmail) are active.
+ * Verification is fully covered (WORKING) ONLY IF:
  * 1. Gmail OAuth is configured AND Gmail observer is actively polling.
  * 2. SMS Gateway is connected (Android app or Google Messages) AND actively polling / reflecting messages.
- * If either is missing, unconfigured, or offline, status is ISSUES with downtime warning.
+ * This reports payment-verification readiness, not payment API liveness or UPI network health.
+ * If neither channel is available, status is ISSUES because incoming UPI payments cannot be verified.
  */
 async function checkUpiServerHealth(ctx, enabledMethods = [], sellingMode = 'OFFLINE', merchantId = '00000000-0000-0000-0000-000000000001') {
   // 0. Check False Narrative Dev Switch (Active for 10 minutes from enabling time)
@@ -266,7 +267,13 @@ async function checkUpiServerHealth(ctx, enabledMethods = [], sellingMode = 'OFF
         const res = await fetch(`http://127.0.0.1:${gmailPort}/health`, { signal: AbortSignal.timeout(800) });
         if (res.ok) {
           const data = await res.json();
-          if (data.status === 'UP') {
+          const lastSuccessfulPollAt = data.lastSuccessfulPollAt
+            ? new Date(data.lastSuccessfulPollAt).getTime()
+            : NaN;
+          const hasRecentSuccessfulPoll = Number.isFinite(lastSuccessfulPollAt) &&
+            Date.now() - lastSuccessfulPollAt >= 0 &&
+            Date.now() - lastSuccessfulPollAt < 300000;
+          if (data.status === 'UP' && data.isRunning === true && hasRecentSuccessfulPoll) {
             pollerActive = true;
           }
         }
@@ -292,14 +299,14 @@ async function checkUpiServerHealth(ctx, enabledMethods = [], sellingMode = 'OFF
           const res = await fetch(`http://127.0.0.1:6099/health`, { signal: AbortSignal.timeout(800) });
           if (res.ok) {
             const data = await res.json();
-            if (data.status === 'UP' && (data.isPolling || data.pollerActive !== false)) {
+            if (data.status === 'UP' && (data.isPolling === true || data.pollerActive === true)) {
               pollerActive = true;
             }
           }
         } catch (e) {}
       }
 
-      if (pollerActive || hasRefreshToken) {
+      if (pollerActive) {
         gmailHealthy = true;
         gmailReason = 'Gmail OAuth connected and actively polling';
       } else {
@@ -333,7 +340,7 @@ async function checkUpiServerHealth(ctx, enabledMethods = [], sellingMode = 'OFF
   // 3-Tier Health Model:
   // Green: Both SMS + Gmail connected -> healthy
   // Yellow: Either SMS OR Gmail connected -> extra processing time
-  // Red: Neither connected -> server facing issues
+  // Red: Neither connected -> incoming UPI payments cannot be verified
   const hasCash = sellingMode === 'ONLINE'
     ? enabledMethods.includes('COD')
     : enabledMethods.includes('CASH_COUNTER');
@@ -369,12 +376,12 @@ async function checkUpiServerHealth(ctx, enabledMethods = [], sellingMode = 'OFF
   return {
     status: 'ISSUES',
     tier: 'RED',
-    label: 'Server Facing Issues',
+    label: 'Payment Verification Unavailable',
     isWorking: false,
-    reason: 'Both Gmail OAuth and SMS Gateway are offline or unconfigured',
+    reason: 'Neither Gmail OAuth nor an SMS payment observer is configured and active',
     smsHealthy: false,
     gmailHealthy: false,
-    warning: 'It is not recommended to pay by UPI right now as the server is facing downtime. We recommend paying by cash instead.',
+    warning: 'The QR can be displayed, but incoming UPI payments cannot be verified because both Gmail and SMS observers are offline or unconfigured. Use another payment method or connect an observer before relying on payment confirmation.',
     recommendedAlternative: hasCash ? 'CASH' : null
   };
 }

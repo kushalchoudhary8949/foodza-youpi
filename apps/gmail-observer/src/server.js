@@ -40,6 +40,8 @@ export class GmailObserverServer {
           service: 'gmail-observer',
           isRunning: this.poller.isRunning,
           lastPollAt: this.poller.lastPollAt,
+          lastSuccessfulPollAt: this.poller.lastSuccessfulPollAt,
+          lastPollError: this.poller.lastPollError,
           observedCount: this.poller.observedCount
         }));
         return;

@@ -154,6 +154,7 @@ describe('Checkout Portal Integration Tests', () => {
 
       // Verify PC Redesign sidebar & header exists
       assert.ok(res.text.includes('ypg-pc-sidebar'));
+      assert.ok(res.text.includes('/css/checkout.css?v=2'));
       assert.ok(res.text.includes('id="pcMerchantName"'));
       assert.ok(res.text.includes('id="pcPriceSummaryAmount"'));
       assert.ok(res.text.includes('ypg-pc-topbar'));
@@ -177,6 +178,8 @@ describe('Checkout Portal Integration Tests', () => {
       assert.equal(resCss.status, 200);
       assert.ok(resCss.headers['content-type'].includes('text/css'));
       assert.ok(resCss.text.includes('.ypg-wrapper'));
+      const desktopLayout = resCss.text.split('@media (min-width: 768px) {')[1]?.split('\n    }')[0] || '';
+      assert.match(desktopLayout, /\.ypg-sticky-footer\s*\{\s*display:\s*none\s*!important;/);
     });
 
     test('the checkout page loads exactly one copy of the client script', async () => {

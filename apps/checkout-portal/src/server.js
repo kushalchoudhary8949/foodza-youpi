@@ -233,16 +233,16 @@ export class CheckoutServer {
     // This avoids cross-origin blocking, CORS errors, and tunnel DNS resolution issues.
     const clientApiBase = '';
 
-    const indicator = state?.upiServerIndicator || { status: 'ISSUES', tier: 'RED', label: 'Server Facing Issues' };
+    const indicator = state?.upiServerIndicator || { status: 'ISSUES', tier: 'RED', label: 'Payment Verification Unavailable' };
     const tier = indicator.tier || (indicator.status === 'WORKING' ? 'GREEN' : (indicator.status === 'BUSY' ? 'YELLOW' : 'RED'));
     const healthClass = tier === 'GREEN' ? 'is-working' : (tier === 'YELLOW' ? 'is-busy' : 'is-issues');
-    const healthLabel = indicator.label || (tier === 'GREEN' ? 'Server Is Working' : (tier === 'YELLOW' ? 'UPI Server Busy' : 'Server Facing Issues'));
+    const healthLabel = indicator.label || (tier === 'GREEN' ? 'Server Is Working' : (tier === 'YELLOW' ? 'UPI Server Busy' : 'Payment Verification Unavailable'));
     const alertStyle = tier === 'GREEN' ? 'none' : 'flex';
     const alertClass = tier === 'YELLOW' ? 'ypg-downtime-alert is-warning' : 'ypg-downtime-alert';
-    const alertHeading = tier === 'YELLOW' ? 'UPI Server Busy' : 'UPI Server Facing Issues';
+    const alertHeading = tier === 'YELLOW' ? 'UPI Server Busy' : 'UPI Payment Verification Unavailable';
     const alertMsg = indicator.warning || (tier === 'YELLOW'
       ? 'Your payment may go through extra processing seconds.'
-      : 'It is not recommended to pay by UPI right now as the server is facing downtime. We recommend paying by cash instead.');
+      : 'The QR can be displayed, but incoming UPI payments cannot be verified because both Gmail and SMS observers are offline or unconfigured. Use another payment method or connect an observer before relying on payment confirmation.');
 
     const sellingMode = state?.sellingMode || state?.branding?.sellingMode || 'ONLINE';
     const enabledMethods = state?.enabledMethods || state?.branding?.enabledPaymentMethods || ['UPI'];

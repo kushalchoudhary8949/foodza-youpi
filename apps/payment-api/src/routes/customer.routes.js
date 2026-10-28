@@ -383,6 +383,49 @@ export function registerCustomerRoutes(server, ctx) {
     });
   });
 
+  // FoodZa-only OTP integration. Unlike customer verification above, this never
+  // creates a YouPI customer or issues a YouPI session.
+  server.post('/api/v1/integrations/foodza/otp/send', async (req, res) => {
+    const configuredSecret = process.env.FOODZA_OTP_API_SECRET;
+    const match = /^Bearer\s+(.+)$/i.exec(req.headers['authorization'] || '');
+    const presentedSecret = match?.[1]?.trim() || '';
+    if (!configuredSecret) {
+      HttpServer.json(res, 503, { success: false, error: 'FoodZa OTP integration is not configured.' });
+      return;
+    }
+    if (!safeEqual(presentedSecret, configuredSecret)) {
+      HttpServer.json(res, 401, { success: false, error: 'Unauthorized.' });
+      return;
+    }
+
+    const body = await HttpServer.parseBody(req).catch(() => ({}));
+    const result = await ctx.foodZaOtpService.send(body.mobileNumber || body.phone || body.phoneNumber);
+    const { status = 200, ...payload } = result;
+    HttpServer.json(res, status, payload);
+  });
+
+  server.post('/api/v1/integrations/foodza/otp/verify', async (req, res) => {
+    const configuredSecret = process.env.FOODZA_OTP_API_SECRET;
+    const match = /^Bearer\s+(.+)$/i.exec(req.headers['authorization'] || '');
+    const presentedSecret = match?.[1]?.trim() || '';
+    if (!configuredSecret) {
+      HttpServer.json(res, 503, { success: false, error: 'FoodZa OTP integration is not configured.' });
+      return;
+    }
+    if (!safeEqual(presentedSecret, configuredSecret)) {
+      HttpServer.json(res, 401, { success: false, error: 'Unauthorized.' });
+      return;
+    }
+
+    const body = await HttpServer.parseBody(req).catch(() => ({}));
+    const result = ctx.foodZaOtpService.verify(
+      body.mobileNumber || body.phone || body.phoneNumber,
+      String(body.otp || body.code || '').trim()
+    );
+    const { status = 200, ...payload } = result;
+    HttpServer.json(res, status, payload);
+  });
+
   // POST /api/v1/customer/register (Gateway-owned Sign Up)
   // Input: exactly name, email, mobileNumber, password
   server.post('/api/v1/customer/register', async (req, res) => {

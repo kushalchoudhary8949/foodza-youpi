@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>{{MERCHANT_NAME}} · {{APP_NAME}} Checkout</title>
-  <link rel="stylesheet" href="/css/checkout.css">
+  <link rel="stylesheet" href="/css/checkout.css?v=2">
 </head>
 
 <body>
@@ -1698,7 +1698,7 @@
         el.textContent = data.merchantName || 'Merchant';
       });
 
-      // Update UPI Server Health Indicator (3-Tier Model: Green, Yellow, Red)
+      // Update payment-verification readiness indicator (3-Tier Model: Green, Yellow, Red)
       const serverIndicator = data.upiServerIndicator || { status: 'WORKING', tier: 'GREEN', label: 'Server Is Working', isWorking: true };
       const healthPill = document.getElementById('upiServerHealthIndicator');
       const healthLabel = document.getElementById('serverStatusLabel');
@@ -1719,7 +1719,7 @@
         }
       }
       if (healthLabel) {
-        healthLabel.textContent = serverIndicator.label || (tier === 'GREEN' ? 'Server Is Working' : (tier === 'YELLOW' ? 'UPI Server Busy' : 'Server Facing Issues'));
+        healthLabel.textContent = serverIndicator.label || (tier === 'GREEN' ? 'Server Is Working' : (tier === 'YELLOW' ? 'UPI Server Busy' : 'Payment Verification Unavailable'));
       }
       if (downtimeAlert) {
         if (tier === 'GREEN') {
@@ -1738,9 +1738,9 @@
           // RED
           downtimeAlert.style.display = 'flex';
           downtimeAlert.className = 'ypg-downtime-alert';
-          if (downtimeHeading) downtimeHeading.textContent = 'UPI Server Facing Issues';
+          if (downtimeHeading) downtimeHeading.textContent = 'UPI Payment Verification Unavailable';
           if (downtimeMsg) {
-            downtimeMsg.textContent = serverIndicator.warning || 'It is not recommended to pay by UPI right now as the server is facing downtime. We recommend paying by cash instead.';
+            downtimeMsg.textContent = serverIndicator.warning || 'The QR can be displayed, but incoming UPI payments cannot be verified because both Gmail and SMS observers are offline or unconfigured. Use another payment method or connect an observer before relying on payment confirmation.';
           }
           if (btnCashAlt) {
             btnCashAlt.style.display = (serverIndicator.recommendedAlternative === 'CASH') ? 'inline-block' : 'none';
@@ -2835,8 +2835,15 @@
       }
     } catch (e) { }
 
-    loadState();
-    connectSse();
+    DeviceIdentity.getOrRegister()
+      .then(() => {
+        loadState();
+        connectSse();
+      })
+      .catch((err) => {
+        console.error('[Checkout] Device identity initialization failed:', err);
+        loadState();
+      });
   </script>
 </body>
 

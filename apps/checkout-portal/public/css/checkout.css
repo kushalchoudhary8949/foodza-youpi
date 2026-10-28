@@ -2253,6 +2253,10 @@
         display: none !important;
       }
 
+      .ypg-sticky-footer {
+        display: none !important;
+      }
+
       .ypg-footer {
         display: none !important;
       }

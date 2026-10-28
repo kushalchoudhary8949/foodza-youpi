@@ -2,6 +2,16 @@
 
 YOUPI PG employs a **Tri-Channel Observation Engine** where all three methods operate simultaneously to capture payment credit alerts across channels without creating duplicate payments.
 
+## Checkout Health Warning
+
+The Payment API's `GET /health` endpoint reports process liveness only. It does not mean that an incoming UPI payment can be observed and confirmed. Checkout derives `upiServerIndicator` from the merchant's payment observers:
+
+- **Green:** Gmail OAuth polling has a recent successful Gmail API poll, and an SMS/Android observer is active.
+- **Yellow:** One of those observer channels is active; payment confirmation may take longer.
+- **Red:** Neither is active. The QR can still be generated, but the checkout cannot verify an incoming payment and keeps the warning visible.
+
+The Gmail observer's `GET /health` can return `UP` while idle. Check its `isRunning` and `lastSuccessfulPollAt` fields as well; the latter must be within the last five minutes. A Gmail refresh token alone is not proof of a working observer. Configure Gmail through OAuth and/or activate an SMS/Android observer using the setup steps below.
+
 ---
 
 ## Method 1: Gmail Payment Observer

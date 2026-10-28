@@ -48,6 +48,7 @@ import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerCustomerRoutes } from './routes/customer.routes.js';
 import { registerDeviceRoutes } from './routes/device.routes.js';
 import { getWhatsAppBerryService, WhatsAppBerryService } from './services/whatsapp-berry.service.js';
+import { FoodZaOtpService } from './services/foodza-otp.service.js';
 import { ObserverPollerService } from './services/observer-poller.service.js';
 
 export function createPaymentApp(customDb = null, options = {}) {
@@ -61,6 +62,7 @@ export function createPaymentApp(customDb = null, options = {}) {
     databasePath: path.resolve(rootDir, 'data/test_berry_store.db'),
     metaFile: path.resolve(rootDir, 'data/test_whatsapp_session.json')
   }) : getWhatsAppBerryService());
+  const foodZaOtpService = options.foodZaOtpService || new FoodZaOtpService(whatsappBerryService);
 
   const merchantRepo = new MerchantRepository(db);
   const accountRepo = new ReceivingAccountRepository(db);
@@ -377,6 +379,7 @@ export function createPaymentApp(customDb = null, options = {}) {
     defaultMerchant,
     checkoutBaseUrl,
     whatsappBerryService,
+    foodZaOtpService,
     webhookEngine,
     observerPollerService,
     otpCooldownMs: options.otpCooldownMs

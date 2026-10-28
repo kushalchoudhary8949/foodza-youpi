@@ -62,7 +62,7 @@ describe('UPI Server Health Indicator & Checkout State Invariants', () => {
     assert.equal(res.status, 200);
     assert.ok(typeof res.body.isWorking === 'boolean');
     assert.ok(['WORKING', 'ISSUES'].includes(res.body.status));
-    assert.ok(['Server Is Working', 'Server Facing Issues'].includes(res.body.label));
+    assert.ok(['Server Is Working', 'UPI Server Busy', 'Payment Verification Unavailable'].includes(res.body.label));
     assert.ok(typeof res.body.reason === 'string');
   });
 
@@ -92,8 +92,69 @@ describe('UPI Server Health Indicator & Checkout State Invariants', () => {
     assert.ok(indicator.label);
     if (!indicator.isWorking) {
       assert.equal(indicator.status, 'ISSUES');
-      assert.equal(indicator.label, 'Server Facing Issues');
-      assert.ok(indicator.warning.includes('not recommended to pay by UPI'));
+      assert.equal(indicator.label, 'Payment Verification Unavailable');
+      assert.ok(indicator.warning.includes('cannot be verified'));
+    }
+  });
+
+  test('observer liveness does not clear the warning when Gmail and SMS observers are in standby', async () => {
+    testDb.execute('DELETE FROM android_devices');
+    const merchant = testDb.queryOne(`SELECT branding FROM merchants WHERE id = '00000000-0000-0000-0000-000000000001'`);
+    const branding = JSON.parse(merchant?.branding || '{}');
+    branding.gmailConfig = {
+      refreshToken: 'configured-but-observer-idle',
+      clientId: 'test-client-id',
+      clientSecret: 'test-client-secret'
+    };
+    testDb.execute(`UPDATE merchants SET branding = ? WHERE id = '00000000-0000-0000-0000-000000000001'`, [JSON.stringify(branding)]);
+
+    const previousSmsPort = process.env.SMS_OBSERVER_PORT;
+    const previousGmailPort = process.env.GMAIL_OBSERVER_PORT;
+    const observers = [];
+    const startStandbyObserver = async () => {
+      const observer = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(req.url === '/health'
+          ? { status: 'UP' }
+          : { status: 'STANDBY', isPaired: false, isLoggedIn: false, isPolling: false, isRunning: false }));
+      });
+      await new Promise((resolve, reject) => {
+        observer.once('error', reject);
+        observer.listen(0, '127.0.0.1', resolve);
+      });
+      observers.push(observer);
+      return observer.address().port;
+    };
+
+    try {
+      process.env.SMS_OBSERVER_PORT = String(await startStandbyObserver());
+      process.env.GMAIL_OBSERVER_PORT = String(await startStandbyObserver());
+
+      const healthRes = await request('/api/v1/checkout/server-health');
+      assert.equal(healthRes.status, 200);
+      assert.equal(healthRes.body.status, 'ISSUES');
+      assert.equal(healthRes.body.tier, 'RED');
+      assert.equal(healthRes.body.smsHealthy, false);
+      assert.equal(healthRes.body.gmailHealthy, false);
+      assert.equal(healthRes.body.label, 'Payment Verification Unavailable');
+      assert.match(healthRes.body.reason, /Neither Gmail OAuth nor an SMS payment observer/);
+      assert.match(healthRes.body.warning, /incoming UPI payments cannot be verified/);
+
+      const createRes = await request('/api/v1/payments', {
+        method: 'POST',
+        body: { amount: 250.00, orderId: 'ORD-TEST-OBSERVER-STANDBY', currency: 'INR' }
+      });
+      assert.equal(createRes.status, 201);
+      const stateRes = await request(`/api/v1/checkout/${createRes.body.paymentId}/state`);
+      assert.equal(stateRes.status, 200);
+      assert.equal(stateRes.body.upiServerIndicator.tier, 'RED');
+      assert.match(stateRes.body.upiServerIndicator.warning, /incoming UPI payments cannot be verified/);
+    } finally {
+      for (const observer of observers) {
+        await new Promise(resolve => observer.close(resolve));
+      }
+      process.env.SMS_OBSERVER_PORT = previousSmsPort;
+      process.env.GMAIL_OBSERVER_PORT = previousGmailPort;
     }
   });
 
@@ -121,7 +182,9 @@ describe('UPI Server Health Indicator & Checkout State Invariants', () => {
     try {
       mockGmailServer = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'UP', isRunning: true, isPolling: true, isLoggedIn: true }));
+        res.end(JSON.stringify(req.url === '/health'
+          ? { status: 'UP', isRunning: true, lastSuccessfulPollAt: new Date().toISOString() }
+          : { status: 'CONNECTED', isRunning: true, isPolling: true, isLoggedIn: true }));
       });
       await new Promise((resolve, reject) => {
         mockGmailServer.once('error', reject);
@@ -193,9 +256,9 @@ describe('UPI Server Health Indicator & Checkout State Invariants', () => {
     const healthRes = await request('/api/v1/checkout/server-health');
     assert.equal(healthRes.status, 200);
     assert.equal(healthRes.body.status, 'ISSUES');
-    assert.equal(healthRes.body.label, 'Server Facing Issues');
+    assert.equal(healthRes.body.label, 'Payment Verification Unavailable');
     assert.equal(healthRes.body.isWorking, false);
-    assert.ok(healthRes.body.warning.includes('not recommended to pay by UPI'));
+    assert.ok(healthRes.body.warning.includes('cannot be verified'));
   });
 
   test('Dev settings: Disabling false narrative explicitly immediately reverts to live status', async () => {
@@ -221,4 +284,3 @@ describe('UPI Server Health Indicator & Checkout State Invariants', () => {
     assert.equal(healthRes.body.isWorking, false);
   });
 });
-
