@@ -70,6 +70,11 @@ TRACKER.md
 /*.mp4
 /*.webm
 
+# Raw demo recordings (kept out of git; the in-README demo GIFs are tracked instead)
+assets/*.mp4
+assets/*.webm
+assets/*.mov
+
 # Android / Gradle build output
 .gradle/
 build/

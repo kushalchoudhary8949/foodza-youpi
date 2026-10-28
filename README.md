@@ -76,7 +76,7 @@ See **YOUPI PG V2** live in action across Desktop and Mobile checkout flows:
 
 <br/>
 
-> **High-Definition 120FPS Raw Recordings**: [assets/Desktop.mp4](assets/Desktop.mp4) • [assets/Mobile.mp4](assets/Mobile.mp4)
+> **Demo clips**: the animated previews above are the canonical recordings and are embedded in this page. Raw `.mp4` captures are not stored in the repository (they are local-only) so that clones stay fast and reliable.
 
 <br/>
 
