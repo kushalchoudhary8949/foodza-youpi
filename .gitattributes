@@ -1,4 +1,8 @@
-# Git Large File Storage (LFS) configuration
-# Automatically tracks media files exceeding standard Git limits
-*.mp4 filter=lfs diff=lfs merge=lfs -text
-*.webm filter=lfs diff=lfs merge=lfs -text
+# Media files (demo .mp4 / .webm recordings) are NOT stored in this repository.
+#
+# They used to be tracked through Git LFS, but the objects were never uploaded to
+# the LFS store, so every clone (Render, CI, contributors) failed at checkout with
+# "smudge filter lfs failed" / "Object does not exist on the server: [404]".
+#
+# Keep large recordings out of git entirely; the in-README demo GIFs in assets/
+# are tracked as ordinary files and are small enough to clone normally.
