@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { runMigrations } from '../packages/db/src/migrate.js';
 import { startControlCenter } from '../apps/control-center/src/index.js';
 import { resolveRuntimeUrls } from '../packages/common/src/runtime-config.js';
+import { getEncryptionMasterKey } from '../packages/common/src/secrets.js';
 import { startCloudflaredSafely } from '../packages/common/src/tunnel-command.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,6 +44,28 @@ if (runInLocalhostMode) {
   console.log('\n====================================================');
   console.log('🚀 Starting YOUPI PG V2 — Production Gateway');
   console.log('====================================================');
+}
+
+// 0. Fail fast on an unusable at-rest encryption key.
+//
+// The key is first needed while migrations seed the default merchant, so an invalid value
+// used to surface as an AES error from the middle of the migration stack. Deploy platforms
+// show that stack verbatim, which reads like a code bug instead of the one missing setting.
+// Checking here keeps the message, and the fix, in front of the operator.
+try {
+  getEncryptionMasterKey();
+} catch (err) {
+  console.error('\n================================================================');
+  console.error('❌ [CONFIGURATION ERROR] PRODUCTION STARTUP FAILED');
+  console.error('================================================================');
+  console.error(err.message);
+  console.error('');
+  console.error('Fix: set ENCRYPTION_MASTER_KEY in the host environment to 64 hex characters');
+  console.error('     (e.g. the output of `openssl rand -hex 32`), then redeploy.');
+  console.error('     Unset it to let the app generate one under data/.secrets/ — only sensible');
+  console.error('     when the data directory is a persistent volume.');
+  console.error('================================================================\n');
+  process.exit(1);
 }
 
 // 1. Run database migrations & load persisted configuration (Part B3: never overwrite settings)
