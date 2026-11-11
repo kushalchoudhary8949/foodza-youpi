@@ -17,6 +17,7 @@
     "start:prod": "node scripts/start.js",
     "start:prod:api": "node apps/payment-api/src/index.js",
     "dev": "node scripts/dev.js",
+    "validate:env": "node scripts/validate-env.js",
     "test": "node scripts/test-all.js",
     "test:all": "node scripts/test-all.js",
     "test:acceptance": "node --test scripts/production-infrastructure.test.js",

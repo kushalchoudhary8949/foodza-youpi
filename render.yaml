@@ -1,0 +1,181 @@
+# =============================================================================
+# YOUPI PG V2 — Render Deployment Configuration
+# https://render.com/docs/blueprint-spec
+#
+# Deploy the entire gateway as a single Docker-based Web Service on Render.
+# All 7 internal services run inside one container managed by the built-in
+# Control Center supervisor (port 8090).  The only port that is publicly
+# exposed by Render is 7000 (Checkout Portal), which proxies /api/* to
+# the internal Payment Core API on 6100.
+#
+# BEFORE DEPLOYING:
+#  1. Generate a 64-hex-char encryption key:
+#       node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+#  2. Add it as ENCRYPTION_MASTER_KEY in the Render service's Environment tab.
+#  3. Set all other required secrets listed in the envVars block below.
+#  4. Attach a Render Persistent Disk at /app/data (see the disk block).
+# =============================================================================
+
+services:
+  - type: web
+    name: youpi-pg
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Render routes external HTTPS traffic to this port inside the container.
+    # The Checkout Portal (7000) doubles as the reverse-proxy entry point:
+    # it serves youpi.js and the checkout iframe, and proxies /api/* → :6100.
+    port: 7000
+
+    # Persistent disk so the SQLite database, auto-generated secrets and the
+    # Gmail OAuth token survive container restarts / new deploys.
+    disk:
+      name: youpi-data
+      mountPath: /app/data
+      sizeGB: 1
+
+    healthCheckPath: /health
+
+    # Build & runtime options
+    buildCommand: ""       # Docker handles the build; no extra shell step needed.
+    startCommand: ""       # CMD in Dockerfile: node scripts/start.js
+
+    envVars:
+      # ── Node runtime ───────────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+
+      # ── Startup mode ───────────────────────────────────────────────────────
+      # Render is a cloud host: set YOUPI_MODE=production and supply a
+      # Cloudflare domain, OR opt into localhost mode if you are running
+      # behind Render's own HTTPS proxy without a Cloudflare Tunnel.
+      - key: YOUPI_MODE
+        value: production
+      - key: YOUPI_ALLOW_LOCALHOST_MODE
+        value: "false"
+
+      # ── Cloudflare domain (required in production mode) ────────────────────
+      # Set to your Cloudflare-proxied root domain, e.g. yourdomain.com
+      # Leave blank only if YOUPI_MODE=localhost.
+      - key: CLOUDFLARE_DOMAIN
+        sync: false        # Set in dashboard; not committed to Git.
+
+      - key: DEPLOYMENT_PREFIX
+        value: pay         # Derives pay.<domain>, pay-api.<domain>, pay-admin.<domain>
+
+      # ── Database (SQLite via persistent disk) ──────────────────────────────
+      - key: USE_SQLITE_FALLBACK
+        value: "true"
+      - key: SQLITE_DB_PATH
+        value: /app/data/youpi_pg.sqlite
+
+      # ── Service ports (internal; Render only exposes port 7000 externally) ─
+      - key: PAYMENT_API_PORT
+        value: "6100"
+      - key: CHECKOUT_PORTAL_PORT
+        value: "7000"
+      - key: MERCHANT_ADMIN_PORT
+        value: "6001"
+      - key: HELP_PORTAL_PORT
+        value: "3000"
+      - key: GMAIL_OBSERVER_PORT
+        value: "6003"
+      - key: SMS_OBSERVER_PORT
+        value: "6002"
+      - key: COIN_WALLET_STORE_PORT
+        value: "5000"
+      - key: CONTROL_CENTER_PORT
+        value: "8090"
+
+      # ── Bind host (listen on all interfaces inside the container) ──────────
+      - key: YOUPI_BIND_HOST
+        value: "0.0.0.0"
+
+      # ── Cryptographic secrets ───────────────────────────────────────────────
+      # ENCRYPTION_MASTER_KEY — REQUIRED.
+      # Must be exactly 64 hexadecimal characters (32 bytes = AES-256 key).
+      # Generate once:
+      #   node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+      # Keep the SAME value across all redeploys; changing it makes existing
+      # encrypted records (OAuth tokens, OTPs) permanently unreadable.
+      # Set in the Render Environment tab — never commit the real value to Git.
+      - key: ENCRYPTION_MASTER_KEY
+        sync: false
+
+      # JWT_SECRET — REQUIRED.
+      # At least 32 random characters for signing customer and admin sessions.
+      # Generate: node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+      - key: JWT_SECRET
+        sync: false
+
+      # Initial admin account (used only on first-run database seed).
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+
+      # ── Payment timing ─────────────────────────────────────────────────────
+      - key: PAYMENT_ACTIVE_WINDOW_MS
+        value: "300000"
+      - key: PAYMENT_PROCESSING_WINDOW_MS
+        value: "30000"
+      - key: LATE_OBSERVATION_WINDOW_MS
+        value: "1800000"
+
+      # ── Gmail Observer OAuth ───────────────────────────────────────────────
+      # Create a Google Cloud OAuth 2.0 client (Web application type).
+      # Add https://<pay-gmail.yourdomain.com>/oauth/callback as a redirect URI.
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      # Render sets the public hostname via the RENDER_EXTERNAL_URL env var,
+      # but the Gmail redirect URI must be pinned to the Gmail observer's own
+      # public subdomain (managed via Cloudflare Tunnel).
+      - key: GMAIL_REDIRECT_URI
+        sync: false        # e.g. https://pay-gmail.yourdomain.com/oauth/callback
+      - key: GMAIL_POLL_INTERVAL_MS
+        value: "5000"
+
+      # ── SMS Observer ───────────────────────────────────────────────────────
+      - key: SMS_OBSERVER_POLL_INTERVAL_MS
+        value: "3000"
+
+      # ── Android Observer security ──────────────────────────────────────────
+      # Auto-generated and persisted to /app/data/.secrets/ when unset.
+      # Set explicitly here if you want a stable value across redeploys.
+      - key: ANDROID_ENROLLMENT_SECRET
+        sync: false
+      - key: ANDROID_HEARTBEAT_TIMEOUT_MS
+        value: "180000"
+
+      # ── Webhook engine ─────────────────────────────────────────────────────
+      - key: WEBHOOK_MAX_RETRIES
+        value: "5"
+      - key: WEBHOOK_INITIAL_BACKOFF_MS
+        value: "5000"
+
+      # ── Checkout portal CSP ────────────────────────────────────────────────
+      # Comma-separated merchant storefront origins allowed to iframe the checkout.
+      # Required when your storefront lives on a different domain than the checkout.
+      # e.g. CHECKOUT_FRAME_ANCESTORS=https://shop.yourdomain.com
+      - key: CHECKOUT_FRAME_ANCESTORS
+        sync: false
+
+      # ── White-label branding ───────────────────────────────────────────────
+      - key: DEFAULT_APP_NAME
+        value: "YOUPI PG"
+      - key: DEFAULT_PRIMARY_COLOR
+        value: "#2563eb"
+      - key: DEFAULT_SUPPORT_EMAIL
+        sync: false
+
+      # ── FoodZa OTP integration (optional) ─────────────────────────────────
+      - key: FOODZA_OTP_API_SECRET
+        sync: false
+
+      # ── Private webhook opt-in (SSRF guard override) ───────────────────────
+      # Set to "true" ONLY for self-hosted LAN targets; leave unset in cloud.
+      - key: YOUPI_ALLOW_PRIVATE_WEBHOOKS
+        value: "false"

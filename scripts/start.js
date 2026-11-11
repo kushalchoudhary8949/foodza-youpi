@@ -60,10 +60,24 @@ try {
   console.error('================================================================');
   console.error(err.message);
   console.error('');
-  console.error('Fix: set ENCRYPTION_MASTER_KEY in the host environment to 64 hex characters');
-  console.error('     (e.g. the output of `openssl rand -hex 32`), then redeploy.');
-  console.error('     Unset it to let the app generate one under data/.secrets/ — only sensible');
-  console.error('     when the data directory is a persistent volume.');
+  console.error('Fix: set ENCRYPTION_MASTER_KEY in your host environment to exactly');
+  console.error('     64 hexadecimal characters (32 bytes = AES-256 key), then redeploy.');
+  console.error('');
+  console.error('Generate a valid key (run this locally):');
+  console.error('  node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'hex\'))"');
+  console.error('  — or —');
+  console.error('  openssl rand -hex 32');
+  console.error('');
+  console.error('On Render: Dashboard → Your Service → Environment tab → Add/Update');
+  console.error('  ENCRYPTION_MASTER_KEY = <paste 64 hex chars here>');
+  console.error('');
+  console.error('⚠  IMPORTANT: Keep the SAME key across all redeploys.');
+  console.error('   Data encrypted under a previous key CANNOT be decrypted with a new one.');
+  console.error('   If you have no encrypted production data yet, generate a fresh key freely.');
+  console.error('');
+  console.error('Alternative: Unset ENCRYPTION_MASTER_KEY entirely and ensure /app/data is a');
+  console.error('   persistent volume. The app will auto-generate a stable key there on first');
+  console.error('   boot and reuse it on every subsequent restart.');
   console.error('================================================================\n');
   process.exit(1);
 }
