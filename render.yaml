@@ -179,3 +179,4 @@ services:
       # Set to "true" ONLY for self-hosted LAN targets; leave unset in cloud.
       - key: YOUPI_ALLOW_PRIVATE_WEBHOOKS
         value: "false"
+

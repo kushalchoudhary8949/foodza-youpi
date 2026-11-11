@@ -232,3 +232,4 @@ if (errors.length === 0 && warnings.length === 0) {
   console.log('');
   process.exit(1);
 }
+
